@@ -1,11 +1,11 @@
 {
   "chainSelectorName": "ethereum-mainnet-base-1",
   "isTestnet": false,
-  "receiverAddress": "0x415090eb9EB50900D61509ddf741bCD8cb2B1353",
-  "vaultAddress": "0xf154BBca60E61B569712959Cc5D5435e27508BE2",
+  "receiverAddress": "0x889ad605dE1BB47d4Dd932D25924dDF53b99a279",
+  "vaultAddress": "0x943b828468509765654EA502803DF7F0b21637c6",
   "borrowAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "planTtlSeconds": 300,
-  "gasLimit": "1400000",
-  "agentUrl": "http://localhost:3002/api/agent/plan",
+  "gasLimit": "500000",
+  "agentUrl": "http://localhost:3002/plan",
   "agentSecret": ""
 }

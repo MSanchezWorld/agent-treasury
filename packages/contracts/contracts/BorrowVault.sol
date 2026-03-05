@@ -18,6 +18,7 @@ contract BorrowVault is Ownable, ReentrancyGuard {
   uint256 public constant VARIABLE_RATE_MODE = 2;
 
   IPoolAddressesProvider public immutable aaveAddressesProvider;
+  IPool public immutable pool;
 
   address public executor;
   bool public paused;
@@ -80,6 +81,7 @@ contract BorrowVault is Ownable, ReentrancyGuard {
 
     executor = _executor;
     aaveAddressesProvider = IPoolAddressesProvider(_aaveAddressesProvider);
+    pool = IPool(IPoolAddressesProvider(_aaveAddressesProvider).getPool());
 
     // Conservative defaults; owner should set explicitly.
     minHealthFactor = 16e17; // 1.6
@@ -139,16 +141,15 @@ contract BorrowVault is Ownable, ReentrancyGuard {
     if (!approvedCollateralTokens[asset]) revert NotAllowlisted();
     require(amount > 0, "AMOUNT_0");
 
-    IPool pool = IPool(aaveAddressesProvider.getPool());
+    IPool _pool = pool;
 
     IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
-    IERC20(asset).safeApprove(address(pool), 0);
-    IERC20(asset).safeApprove(address(pool), amount);
+    IERC20(asset).forceApprove(address(_pool), amount);
 
-    pool.supply(asset, amount, address(this), 0);
+    _pool.supply(asset, amount, address(this), 0);
 
     // Being explicit avoids surprises if Aave config changes.
-    pool.setUserUseReserveAsCollateral(asset, true);
+    _pool.setUserUseReserveAsCollateral(asset, true);
 
     emit CollateralSupplied(asset, amount);
   }
@@ -157,11 +158,11 @@ contract BorrowVault is Ownable, ReentrancyGuard {
     require(to != address(0), "TO_0");
     require(amount > 0, "AMOUNT_0");
 
-    IPool pool = IPool(aaveAddressesProvider.getPool());
-    uint256 withdrawn = pool.withdraw(asset, amount, to);
+    IPool _pool = pool;
+    uint256 withdrawn = _pool.withdraw(asset, amount, to);
 
     // Keep withdrawals "safe by default" to match the product policy model.
-    _requireHealthFactor(pool, minHealthFactor);
+    _requireHealthFactor(_pool, minHealthFactor);
 
     emit CollateralWithdrawn(asset, withdrawn, to);
   }
@@ -170,13 +171,12 @@ contract BorrowVault is Ownable, ReentrancyGuard {
     if (!approvedBorrowTokens[asset]) revert NotAllowlisted();
     require(amount > 0, "AMOUNT_0");
 
-    IPool pool = IPool(aaveAddressesProvider.getPool());
+    IPool _pool = pool;
 
     IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
-    IERC20(asset).safeApprove(address(pool), 0);
-    IERC20(asset).safeApprove(address(pool), amount);
+    IERC20(asset).forceApprove(address(_pool), amount);
 
-    uint256 repaid = pool.repay(asset, amount, VARIABLE_RATE_MODE, address(this));
+    uint256 repaid = _pool.repay(asset, amount, VARIABLE_RATE_MODE, address(this));
     emit DebtRepaid(asset, repaid);
   }
 
@@ -203,13 +203,13 @@ contract BorrowVault is Ownable, ReentrancyGuard {
     if (borrowAmount > maxBorrowPerTx) revert Limit();
     if (dailyBorrowed + borrowAmount > maxBorrowPerDay) revert Limit();
 
-    IPool pool = IPool(aaveAddressesProvider.getPool());
+    IPool _pool = pool;
 
-    _requireHealthFactor(pool, minHealthFactor);
+    _pool.borrow(borrowAsset, borrowAmount, VARIABLE_RATE_MODE, 0, address(this));
 
-    pool.borrow(borrowAsset, borrowAmount, VARIABLE_RATE_MODE, 0, address(this));
-
-    _requireHealthFactor(pool, minHealthFactor);
+    // Post-borrow HF check is sufficient — if HF was already too low, borrowing only
+    // makes it worse so this single check catches both cases.
+    _requireHealthFactor(_pool, minHealthFactor);
 
     IERC20(borrowAsset).safeTransfer(payee, borrowAmount);
 
@@ -228,8 +228,8 @@ contract BorrowVault is Ownable, ReentrancyGuard {
     dailyBorrowed = 0;
   }
 
-  function _requireHealthFactor(IPool pool, uint256 minHf) internal view {
-    (, , , , , uint256 hf) = pool.getUserAccountData(address(this));
+  function _requireHealthFactor(IPool _pool, uint256 minHf) internal view {
+    (, , , , , uint256 hf) = _pool.getUserAccountData(address(this));
     if (hf < minHf) revert HealthFactorTooLow(hf);
   }
 }

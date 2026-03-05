@@ -186,33 +186,36 @@ function initWorkflow(cfg: Config) {
 
       const requestedDepositAmount = spendReq.depositAmount != null ? toBigInt(spendReq.depositAmount) : 0n;
 
-      // EVM reads: vault.nonce() and vault.paused().
+      // EVM reads: vault.nonce() and vault.paused() — issue both before calling .result()
+      // so the CRE runtime can batch them into a single round-trip.
       const nonceCallData = encodeFunctionData({ abi: BorrowVaultAbi, functionName: "nonce" });
-      const nonceResp = evmClient
+      const pausedCallData = encodeFunctionData({ abi: BorrowVaultAbi, functionName: "paused" });
+
+      const nonceDeferred = evmClient
         .callContract(runtime, {
           call: encodeCallMsg({
             from: "0x0000000000000000000000000000000000000000",
             to: cfg.vaultAddress,
             data: nonceCallData
           })
-        })
-        .result();
-      const currentNonce = decodeFunctionResult({
-        abi: BorrowVaultAbi,
-        functionName: "nonce",
-        data: bytesToHex(nonceResp.data)
-      }) as bigint;
-
-      const pausedCallData = encodeFunctionData({ abi: BorrowVaultAbi, functionName: "paused" });
-      const pausedResp = evmClient
+        });
+      const pausedDeferred = evmClient
         .callContract(runtime, {
           call: encodeCallMsg({
             from: "0x0000000000000000000000000000000000000000",
             to: cfg.vaultAddress,
             data: pausedCallData
           })
-        })
-        .result();
+        });
+
+      const nonceResp = nonceDeferred.result();
+      const pausedResp = pausedDeferred.result();
+
+      const currentNonce = decodeFunctionResult({
+        abi: BorrowVaultAbi,
+        functionName: "nonce",
+        data: bytesToHex(nonceResp.data)
+      }) as bigint;
       const paused = decodeFunctionResult({
         abi: BorrowVaultAbi,
         functionName: "paused",

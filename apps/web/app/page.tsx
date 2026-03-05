@@ -15,8 +15,8 @@ const FLOW_STEPS = [
       </svg>
     ),
     details: [
-      "Agent deposits USDC into its BorrowVault, swapped 50/50 into WETH + cbBTC.",
-      "Vault supplies assets to Aave V3 — collateral earns yield automatically.",
+      "Agent deposits USDC into its BorrowVault — supplied directly to Aave V3 as collateral.",
+      "Optionally swap into WETH + cbBTC for diversified, yield-earning collateral.",
       "The treasury grows while the agent operates. No action needed.",
     ],
     labels: ["BorrowVault", "Aave V3 Pool", "Yield-Earning"],
@@ -68,11 +68,11 @@ const FLOW_STEPS = [
     ),
     details: [
       "BorrowBotReceiver verifies the DON signature and decodes the verified plan.",
-      "BorrowVault enforces 12+ on-chain safety checks: allowlists, nonce, expiry, cooldown, limits.",
-      "Health factor checked before and after borrow — the treasury stays safe.",
+      "BorrowVault enforces 12 on-chain safety checks: allowlists, nonce, expiry, cooldown, limits.",
+      "Health factor verified after borrow — the treasury stays safe.",
       "Aave V3 issues variable-rate USDC debt. USDC goes directly to the payee.",
     ],
-    labels: ["12 Safety Checks", "Aave Borrow", "Health Factor Guard", "Pay Payee"],
+    labels: ["12 Safety Checks", "Aave Borrow", "Post-Borrow HF Guard", "Pay Payee"],
   },
   {
     num: "05",
@@ -113,9 +113,9 @@ const SAFETY_LAYERS = [
       "Borrow token + payee allowlisted",
       "Nonce replay protection",
       "Plan not expired (< 5 min)",
-      "Cooldown between executions (10 min)",
+      "Cooldown between executions (configurable)",
       "Per-tx cap ($100) + daily cap ($200)",
-      "Health factor ≥ 1.6 pre + post borrow",
+      "Health factor ≥ 1.6 post-borrow",
     ],
   },
   {
@@ -130,11 +130,11 @@ const SAFETY_LAYERS = [
 ];
 
 const CONTRACTS = [
-  { name: "BorrowVault", addr: "0xf154BB…08BE2", role: "Holds collateral, borrows, pays" },
-  { name: "BorrowBotReceiver", addr: "0x4150…B1353", role: "CRE entry point on-chain" },
+  { name: "BorrowVault", addr: "0x943b82…37c6", role: "Holds collateral, borrows, pays" },
+  { name: "BorrowBotReceiver", addr: "0x889ad6…a279", role: "CRE entry point on-chain" },
   { name: "Aave V3 Pool", addr: "Base mainnet", role: "Lending + borrowing" },
-  { name: "USDC", addr: "0x8335…02913", role: "Borrow token" },
-  { name: "WETH / cbBTC", addr: "Base mainnet", role: "Collateral assets" },
+  { name: "USDC", addr: "0x8335…02913", role: "Borrow + collateral token" },
+  { name: "WETH / cbBTC", addr: "Base mainnet", role: "Optional collateral assets" },
 ];
 
 /* ──────────────────────── Color helpers ──────────────────────── */
@@ -359,17 +359,17 @@ export default function HomePage() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-5">
-              Hold Assets. Earn Yield.
+              Self-Sustaining
               <br />
               <span className="bg-gradient-to-r from-accent via-purple to-accent2 bg-clip-text text-transparent">
-                Borrow to Spend.
+                Agent Treasuries.
               </span>
             </h1>
 
             <p className="text-text-secondary text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-8">
-              The wealthy never sell — they borrow against what they own. Now AI agents do the same.
-              Hold BTC &amp; ETH, earn yield on Aave V3, borrow USDC to pay for services.
-              You approve every spend. Chainlink CRE verifies it.
+              AI agents hold BTC &amp; ETH. The assets appreciate and earn yield.
+              The agent borrows USDC to pay for what it needs — compute, data, other agents.
+              Revenue goes back into the treasury. The cycle repeats. The agent never sells, never stops.
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -419,7 +419,7 @@ export default function HomePage() {
             How It Works
           </h2>
           <p className="text-text-secondary text-sm mt-3 max-w-lg mx-auto">
-            You approve every spend. CRE verifies it. The agent never sells its assets — it borrows against its own treasury.
+            Deposit. Earn yield. Borrow to spend. Earn revenue. Deposit again. The treasury grows with every cycle.
           </p>
         </div>
 
@@ -435,6 +435,129 @@ export default function HomePage() {
 
         {/* Architecture */}
         <ArchitectureDiagram />
+
+        {/* Liquidation Risk */}
+        <section className="mt-32">
+          <div className="max-w-3xl mx-auto rounded-2xl border border-amber/20 bg-amber/[0.04] backdrop-blur-sm p-6 sm:p-8">
+            <div className="flex gap-4">
+              <div className="shrink-0 mt-0.5">
+                <div className="h-10 w-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center text-amber">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-text-primary mb-1">
+                  &ldquo;What about liquidation?&rdquo;
+                </h3>
+                <p className="text-[13px] text-text-secondary leading-relaxed mb-4">
+                  When you borrow against crypto, there&rsquo;s always a risk: if the price drops too far, the protocol sells your collateral to cover the debt.
+                  Agent Treasury prevents this by keeping borrows small relative to what&rsquo;s in the vault.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { label: "Safety Buffer", value: "1.6x", detail: "The vault always holds 60% more collateral than it owes — enforced on every borrow" },
+                    { label: "Max per Spend", value: "$100", detail: "The agent can only borrow up to $100 at a time — no large, risky borrows" },
+                    { label: "Max per Day", value: "$200", detail: "Even with multiple spends, total borrowing is capped at $200 per day" },
+                  ].map((guard) => (
+                    <div key={guard.label} className="rounded-lg border border-amber/15 bg-amber/[0.03] px-3 py-2.5">
+                      <p className="text-[11px] text-text-tertiary uppercase tracking-wider">{guard.label}</p>
+                      <p className="text-lg font-bold text-amber mt-0.5">{guard.value}</p>
+                      <p className="text-[12px] text-text-tertiary mt-1.5 leading-relaxed">{guard.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[12px] text-text-tertiary mt-3">
+                  All limits are set by the vault owner and enforced on-chain. Advanced liquidation protection is on the roadmap.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Vision / What's Next */}
+        <section className="mt-32">
+          <div className="text-center mb-12">
+            <p className="text-accent2 text-xs font-medium tracking-widest uppercase mb-2">The Vision</p>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              Where This Is Going
+            </h2>
+            <p className="text-text-secondary text-sm mt-3 max-w-lg mx-auto">
+              The wealthy never sell — they borrow against what they own.
+              Agent Treasury brings that same model to AI agents, creating a self-sustaining cycle that runs forever.
+            </p>
+          </div>
+
+          <div className="max-w-4xl mx-auto rounded-2xl border border-border bg-surface/40 backdrop-blur-sm p-6 sm:p-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                {
+                  title: "Today",
+                  color: "accent" as const,
+                  tag: "Live on Base",
+                  items: [
+                    "Deposit BTC, ETH, or USDC as collateral",
+                    "Earn yield on Aave V3 while holding",
+                    "Borrow USDC to pay allowlisted services",
+                    "CRE verifies every spend — 12 on-chain checks",
+                  ],
+                },
+                {
+                  title: "Next: x402 Payments",
+                  color: "purple" as const,
+                  tag: "In Development",
+                  items: [
+                    "Agents pay for services via HTTP 402",
+                    "Borrow USDC → pay per API request",
+                    "No pre-funding, no payment accounts",
+                    "Standard HTTP — any service can accept it",
+                  ],
+                },
+                {
+                  title: "The Endgame",
+                  color: "accent2" as const,
+                  tag: "Vision",
+                  items: [
+                    "Agent holds BTC + ETH — assets appreciate over time",
+                    "Borrows USDC to operate: compute, data, services",
+                    "Earns revenue → deposits back → treasury grows",
+                    "The cycle repeats forever. Self-sustaining agents.",
+                  ],
+                },
+              ].map((col) => {
+                const c = colorMap[col.color];
+                return (
+                  <div key={col.title} className="flex flex-col">
+                    <div className={`inline-flex self-start items-center rounded-full px-3 py-1 text-[11px] font-medium ${c.bg} ${c.text} border ${c.border} mb-4`}>
+                      {col.tag}
+                    </div>
+                    <h3 className="text-base font-semibold text-text-primary mb-3">{col.title}</h3>
+                    <ul className="space-y-2">
+                      {col.items.map((item) => (
+                        <li key={item} className="flex gap-2.5 text-[13px] text-text-secondary leading-relaxed">
+                          <span className={`mt-1.5 h-1.5 w-1.5 rounded-full ${c.dot} shrink-0 opacity-60`} />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-border">
+              <p className="text-[13px] text-text-secondary leading-relaxed max-w-2xl">
+                <span className="font-medium text-text-primary">Why x402?</span>{" "}
+                Today the agent pays an allowlisted address. With{" "}
+                <a href="https://www.x402.org/" target="_blank" rel="noreferrer" className="text-purple hover:underline">x402</a>,
+                any HTTP service can require payment via the standard 402 status code.
+                The agent borrows USDC from its treasury and pays per-request — no accounts, no API keys, no invoices.
+                Just money over HTTP, verified by Chainlink CRE.
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* CTA */}
         <div className="mt-32 mb-24 text-center">

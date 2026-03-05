@@ -20,5 +20,14 @@ library SafeERC20 {
     (bool ok, bytes memory data) = address(token).call(abi.encodeWithSelector(token.approve.selector, spender, value));
     require(ok && (data.length == 0 || abi.decode(data, (bool))), "SAFE_APPROVE_FAILED");
   }
+
+  /// @dev Sets allowance to `value`, resetting to 0 first only if needed (for USDT-like tokens).
+  function forceApprove(IERC20 token, address spender, uint256 value) internal {
+    (bool ok, bytes memory data) = address(token).call(abi.encodeWithSelector(token.approve.selector, spender, value));
+    if (!ok || (data.length > 0 && !abi.decode(data, (bool)))) {
+      safeApprove(token, spender, 0);
+      safeApprove(token, spender, value);
+    }
+  }
 }
 
