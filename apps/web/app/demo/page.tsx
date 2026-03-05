@@ -7,7 +7,7 @@ import StoryReplay from "./story-replay";
 const BASESCAN = "https://basescan.org";
 
 // Demo defaults (Base mainnet deployments in this repo).
-const DEFAULT_VAULT = "0xf154BBca60E61B569712959Cc5D5435e27508BE2";
+const DEFAULT_VAULT = "0x943b828468509765654EA502803DF7F0b21637c6";
 const DEFAULT_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const DEFAULT_AGENT_WALLET = "0x7C00B7060Fe24F6A4E32F56ade0b91675B9D81C9";
 const DEFAULT_PAYEE = "0x42444551e2b5FEb7A7c2eE4dA38993381B08Bc6d";
@@ -15,7 +15,7 @@ const DEFAULT_WETH = "0x4200000000000000000000000000000000000006";
 const DEFAULT_CBBTC = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 const NON_ALLOWLISTED_PAYEE_PRESET = "0x000000000000000000000000000000000000dEaD";
 const PROOF_CACHE_KEY_VERSION = "v2";
-const CRE_GAS_LIMIT = "1400000";
+const CRE_GAS_LIMIT = "500000";
 const PROOF_FETCH_TIMEOUT_MS = 45_000;
 
 type Proof = {
@@ -1163,8 +1163,9 @@ function LiveDemo() {
             <button onClick={() => void refreshProof().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={running || proofLoading} className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-40">
               {proofLoading ? "Refreshing…" : "Refresh"}
             </button>
-            <button onClick={() => void resetToUsdc()} disabled={running || proofLoading || resetting} className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-40" title="Repay + withdraw + swap to USDC">
-              {resetting ? "Resetting…" : "Reset"}
+            <button onClick={() => void resetToUsdc()} disabled={running || proofLoading || resetting} className="inline-flex items-center gap-1.5 rounded-full border border-amber/30 bg-amber/10 px-3 py-1 text-[11px] font-medium text-amber hover:bg-amber/20 transition-colors disabled:opacity-40" title="Repay all debt, withdraw collateral, reset to USDC — lets you run the demo again from scratch">
+              <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3" stroke="currentColor" strokeWidth="1.5"><path d="M2 8a6 6 0 0 1 10.3-4.2M14 8a6 6 0 0 1-10.3 4.2" strokeLinecap="round" strokeLinejoin="round" /><path d="M12 2v2.5h-2.5M4 14v-2.5h2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              {resetting ? "Resetting…" : "Reset Position"}
             </button>
           </div>
         </div>
