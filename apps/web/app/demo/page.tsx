@@ -385,23 +385,11 @@ function LiveDemo() {
       // Ignore localStorage failures.
     }
 
+    // Clear stale localStorage values so defaults always apply.
     try {
-      const savedDeposit = (localStorage.getItem("ctb.demo.depositUsdc") || "").trim();
-      if (savedDeposit && parseUsdcHumanToUnits(savedDeposit) != null) setDepositUsdc(savedDeposit);
-    } catch {
-      // Ignore localStorage failures.
-    }
-
-    try {
-      const savedBorrow = (localStorage.getItem("ctb.demo.borrowUsdc") || "").trim();
-      if (savedBorrow && parseUsdcHumanToUnits(savedBorrow) != null) setAmountUsdc(savedBorrow);
-    } catch {
-      // Ignore localStorage failures.
-    }
-
-    try {
-      const savedMode = (localStorage.getItem("ctb.demo.depositMode") || "").trim().toLowerCase();
-      if (savedMode === "usdc" || savedMode === "eth_btc") setDepositMode(savedMode);
+      localStorage.removeItem("ctb.demo.depositUsdc");
+      localStorage.removeItem("ctb.demo.borrowUsdc");
+      localStorage.removeItem("ctb.demo.depositMode");
     } catch {
       // Ignore localStorage failures.
     }
@@ -434,48 +422,6 @@ function LiveDemo() {
     }, 350);
     return () => clearTimeout(t);
   }, [payee, running]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ctb.demo.depositUsdc", depositUsdc.trim());
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, [depositUsdc]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ctb.demo.borrowUsdc", amountUsdc.trim());
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, [amountUsdc]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ctb.demo.depositMode", depositMode);
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, [depositMode]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ctb.demo.broadcast", broadcast ? "true" : "false");
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, [broadcast]);
-
-  useEffect(() => {
-    try {
-      const saved = (localStorage.getItem("ctb.demo.broadcast") || "").trim().toLowerCase();
-      if (saved === "true") setBroadcast(true);
-      if (saved === "false") setBroadcast(false);
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, []);
 
   function applyPreset(id: "happy" | "non_allowlisted" | "borrow_too_much" | "simulate_only") {
     setPresetId(id);
@@ -1196,27 +1142,8 @@ function LiveDemo() {
             </div>
           </div>
 
-          {/* Row 2: Dropdowns + Run button + progress */}
+          {/* Row 2: Run button + progress */}
           <div className="flex items-center gap-3">
-            <div className="miniField shrink-0" style={{ width: "120px" }}>
-              <div className="miniRow">
-                <select className="miniInput" value={depositMode} onChange={(e) => setDepositMode(e.target.value === "usdc" ? "usdc" : "eth_btc")} disabled={running || confirmRunOpen}>
-                  <option value="eth_btc">ETH + BTC</option>
-                  <option value="usdc">USDC only</option>
-                </select>
-              </div>
-            </div>
-            <div className="miniField shrink-0" style={{ width: "120px" }}>
-              <div className="miniRow">
-                <select className="miniInput" value={presetId} onChange={(e) => applyPreset((e.target.value as any) || "happy")} disabled={running || confirmRunOpen}>
-                  <option value="happy">Happy path</option>
-                  <option value="non_allowlisted">Bad payee</option>
-                  <option value="borrow_too_much">Over-borrow</option>
-                  <option value="simulate_only">Sim only</option>
-                </select>
-              </div>
-            </div>
-
             <button
               type="button"
               onClick={toggleRunConfirm}
@@ -1233,11 +1160,6 @@ function LiveDemo() {
                 <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
               )}
             </button>
-
-            <label className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary cursor-pointer shrink-0">
-              <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)} disabled={running || confirmRunOpen} className="accent-accent" style={{ width: "13px", height: "13px" }} />
-              {broadcast ? "Broadcast" : "Sim only"}
-            </label>
 
             {/* Progress steps — pushed right */}
             <div className="flex items-center gap-1.5 ml-auto">
