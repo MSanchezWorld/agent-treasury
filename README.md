@@ -169,13 +169,20 @@ Simulate with broadcast:
 
 ## Chainlink CRE Integration
 
+All files that use Chainlink CRE:
+
 | File | Role |
 |------|------|
 | [`cre/project.yaml`](cre/project.yaml) | CRE project config + RPC targets |
-| [`cre/workflows/.../main.ts`](cre/workflows/borrowbot-borrow-and-pay/main.ts) | Workflow: HTTP trigger, batched EVM reads, agent call, EVM write |
-| [`cre/workflows/.../config.mainnet.json`](cre/workflows/borrowbot-borrow-and-pay/config.mainnet.json) | Runtime config (addresses, gas limit) |
-| [`BorrowBotReceiver.sol`](packages/contracts/contracts/BorrowBotReceiver.sol) | On-chain receiver — validates DON signature, calls vault |
-| [`ReceiverTemplate.sol`](packages/contracts/contracts/cre/ReceiverTemplate.sol) | Forwarder validation + metadata decoding |
+| [`cre/workflows/borrowbot-borrow-and-pay/main.ts`](cre/workflows/borrowbot-borrow-and-pay/main.ts) | **Core workflow**: HTTP trigger, batched EVM reads, agent call, EVM writeReport |
+| [`cre/workflows/borrowbot-borrow-and-pay/workflow.yaml`](cre/workflows/borrowbot-borrow-and-pay/workflow.yaml) | Workflow target mapping (triggers, actions, consensus) |
+| [`cre/workflows/borrowbot-borrow-and-pay/config.mainnet.json`](cre/workflows/borrowbot-borrow-and-pay/config.mainnet.json) | Runtime config (contract addresses, gas limit, agent URL) |
+| [`packages/contracts/contracts/BorrowBotReceiver.sol`](packages/contracts/contracts/BorrowBotReceiver.sol) | On-chain CRE receiver — validates DON signature, decodes report, calls vault |
+| [`packages/contracts/contracts/cre/ReceiverTemplate.sol`](packages/contracts/contracts/cre/ReceiverTemplate.sol) | CRE forwarder validation + metadata decoding base contract |
+| [`packages/contracts/contracts/cre/IReceiver.sol`](packages/contracts/contracts/cre/IReceiver.sol) | CRE receiver interface |
+| [`packages/contracts/scripts/deployBorrowBotBase.ts`](packages/contracts/scripts/deployBorrowBotBase.ts) | Deployment script — configures CRE forwarder address |
+| [`packages/contracts/scripts/configureBorrowBotBase.ts`](packages/contracts/scripts/configureBorrowBotBase.ts) | Post-deploy config — sets executor (CRE receiver) on vault |
+| [`apps/agent/server.mjs`](apps/agent/server.mjs) | Agent HTTP server — CRE workflow calls `/plan` for spend proposals |
 
 ---
 
