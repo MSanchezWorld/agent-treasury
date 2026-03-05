@@ -1,5 +1,6 @@
 {
   "name": "@borrowbot/contracts",
+  "description": "BorrowVault and BorrowBotReceiver Solidity contracts for Aave V3 on Base.",
   "private": true,
   "version": "0.0.1",
   "scripts": {

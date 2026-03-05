@@ -1,5 +1,6 @@
 {
-  "name": "borrowbot",
+  "name": "agent-treasury",
+  "description": "Self-sustaining AI agent treasuries — hold crypto, earn yield, borrow to spend. Chainlink CRE + Aave V3 on Base.",
   "private": true,
   "packageManager": "yarn@1.22.22",
   "workspaces": [
