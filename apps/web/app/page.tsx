@@ -504,14 +504,14 @@ export default function HomePage() {
                   ],
                 },
                 {
-                  title: "Next: x402 Payments",
+                  title: "Next",
                   color: "purple" as const,
                   tag: "In Development",
                   items: [
-                    "Agents pay for services via HTTP 402",
-                    "Borrow USDC → pay per API request",
-                    "No pre-funding, no payment accounts",
-                    "Standard HTTP — any service can accept it",
+                    "Auto-spend below a threshold — no approval needed",
+                    "Owner approval only for large or unusual spends",
+                    "x402 payments: borrow USDC, pay per HTTP request",
+                    "Agents operate autonomously within guardrails",
                   ],
                 },
                 {
