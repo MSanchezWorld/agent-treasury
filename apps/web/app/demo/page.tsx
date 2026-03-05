@@ -250,9 +250,9 @@ export default function DemoPage() {
 
 function LiveDemo() {
   const [payee, setPayee] = useState(DEFAULT_PAYEE);
-  const [amountUsdc, setAmountUsdc] = useState("4.00");
-  const [depositUsdc, setDepositUsdc] = useState("10.00");
-  const [depositMode, setDepositMode] = useState<"eth_btc" | "usdc">("eth_btc");
+  const [amountUsdc, setAmountUsdc] = useState("1.00");
+  const [depositUsdc, setDepositUsdc] = useState("5.00");
+  const [depositMode, setDepositMode] = useState<"eth_btc" | "usdc">("usdc");
   const [presetId, setPresetId] = useState<"happy" | "non_allowlisted" | "borrow_too_much" | "simulate_only">("happy");
   const [broadcast, setBroadcast] = useState(true);
   const [copied, setCopied] = useState<null | "agent" | "debug" | "error">(null);
@@ -481,9 +481,9 @@ function LiveDemo() {
     setPresetId(id);
     if (id === "happy") {
       setPayee(DEFAULT_PAYEE);
-      setDepositUsdc("10.00");
-      setDepositMode("eth_btc");
-      setAmountUsdc("4.00");
+      setDepositUsdc("5.00");
+      setDepositMode("usdc");
+      setAmountUsdc("1.00");
       setBroadcast(true);
       return;
     }
