@@ -6,6 +6,6 @@
   "borrowAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "planTtlSeconds": 300,
   "gasLimit": "500000",
-  "agentUrl": "http://localhost:8787/plan",
+  "agentUrl": "http://localhost:3002/api/agent/plan",
   "agentSecret": ""
 }

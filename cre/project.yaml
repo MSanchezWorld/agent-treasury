@@ -5,5 +5,5 @@
 mainnet-settings:
   rpcs:
     - chain-name: ethereum-mainnet-base-1
-      url: https://base-rpc.publicnode.com
+      url: https://base.drpc.org
 

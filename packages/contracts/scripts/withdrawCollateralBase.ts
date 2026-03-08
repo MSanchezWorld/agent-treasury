@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseUnits } from "ethers";
 
-const DEFAULT_CBBTC_BASE = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
+const DEFAULT_USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 function optionalEnv(name: string, fallback: string) {
   return (process.env[name]?.trim() || fallback).trim();
@@ -32,7 +32,7 @@ async function main() {
   const vaultAddress = (process.env.VAULT_ADDRESS?.trim() || getVaultAddressFromCreConfig() || "").trim();
   if (!vaultAddress) throw new Error("Missing VAULT_ADDRESS and no vaultAddress found in CRE config");
 
-  const collateralToken = normalizeAddress(optionalEnv("COLLATERAL_TOKEN_ADDRESS", DEFAULT_CBBTC_BASE));
+  const collateralToken = normalizeAddress(optionalEnv("COLLATERAL_TOKEN_ADDRESS", DEFAULT_USDC_BASE));
   const amountRaw = (process.env.WITHDRAW_AMOUNT || "").trim();
   const amountHuman = (process.env.WITHDRAW_AMOUNT_HUMAN || "").trim();
   if (!amountRaw && !amountHuman) {

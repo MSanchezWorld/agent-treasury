@@ -621,6 +621,56 @@ async function main() {
     } catch (e) {
       console.log(`[topup] cbBTC sell skipped (${summarizeError(e)})`);
     }
+
+    // 4) Last resort: swap signer ETH -> WETH -> USDC to cover the debt.
+    //    This handles the Aave edge case where withdrawing same-token collateral
+    //    (USDC collateral + USDC debt) triggers an arithmetic panic (0x11).
+    {
+      const bal = (await usdcToken.balanceOf(signer.address)) as bigint;
+      if (bal < desired) {
+        const nativeBal = (await ethers.provider.getBalance(signer.address)) as bigint;
+        // Reserve 0.0003 ETH for gas, use the rest (up to 0.001 ETH) for the swap.
+        const gasReserve = 300_000_000_000_000n; // 0.0003 ETH
+        const maxSwap = 1_000_000_000_000_000n; // 0.001 ETH
+        const available = nativeBal > gasReserve ? nativeBal - gasReserve : 0n;
+        const wrapAmt = available > maxSwap ? maxSwap : available;
+
+        if (wrapAmt > 0n) {
+          console.log(`[topup] Swapping ${formatTokenAmount(wrapAmt, 18)} ETH -> WETH -> USDC as last resort...`);
+
+          await Promise.all([
+            ensureHasCode("UniswapV3Factory", factoryAddr),
+            ensureHasCode("Permit2", permit2Addr),
+            ensureHasCode("UniswapV3Router", routerAddr),
+            ensureHasCode("UniswapV3Quoter", quoterAddr)
+          ]);
+
+          // Wrap ETH via WETH deposit() — need a fresh contract instance with the payable ABI.
+          const wethPayable = await ethers.getContractAt(
+            ["function deposit() external payable"],
+            weth,
+            managedSigner
+          );
+          const wrapTx = await wethPayable.deposit({ value: wrapAmt });
+          console.log(`[topup] wrap tx:`, wrapTx.hash);
+          await wrapTx.wait();
+
+          const wethBal = (await tokenWeth.balanceOf(signer.address)) as bigint;
+          if (wethBal > 0n) {
+            await swapExact({
+              tokenInAddr: weth,
+              tokenOutAddr: usdc,
+              tokenInContract: tokenWeth,
+              tokenInSym: wethSymbol,
+              tokenOutSym: usdcSymbol,
+              tokenInDec: Number(wethDecimals),
+              tokenOutDec: Number(usdcDecimals),
+              amountIn: wethBal
+            });
+          }
+        }
+      }
+    }
   }
 
   // ---- Repay USDC variable debt, using collateral to top up if needed ----
@@ -629,7 +679,7 @@ async function main() {
     if (d === 0n) break;
 
     const bal = (await usdcToken.balanceOf(signer.address)) as bigint;
-  if (bal === 0n) {
+    if (bal === 0n) {
       await topUpUsdcForRepay(d);
       continue;
     }
@@ -678,10 +728,10 @@ async function main() {
     }
 
     if (!repaid) {
-      throw new Error(
-        `Unable to repay debt this iteration. debt=${formatTokenAmount(d, Number(usdcDecimals))} ${usdcSymbol} ` +
-          `wallet=${formatTokenAmount(bal, Number(usdcDecimals))} ${usdcSymbol}`
-      );
+      // Likely stale RPC read — wallet reported a balance it doesn't actually have.
+      // Fall back to topUp (swap ETH or withdraw collateral) instead of throwing.
+      console.log(`[repay] All repay attempts failed (possible stale RPC read). Trying topUp...`);
+      await topUpUsdcForRepay(d);
     }
   }
 
