@@ -4,16 +4,16 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 const DEFAULT_PAYEE = "0x42444551e2b5FEb7A7c2eE4dA38993381B08Bc6d";
-const DEFAULT_VAULT = "0xf154BBca60E61B569712959Cc5D5435e27508BE2";
+const DEFAULT_VAULT = "0x943b828468509765654EA502803DF7F0b21637c6";
 const BASESCAN = "https://basescan.org";
 
 const STORY = {
-  deposit: 10,
-  borrow: 4,
-  payee: "0x4244...c6d",
-  collateralUsd: 9.87,
-  debtUsd: 4.0,
-  healthFactor: "1.21",
+  deposit: 5,
+  borrow: 1,
+  payee: "0x4244...Bc6d",
+  collateralUsd: 4.98,
+  debtUsd: 1.0,
+  healthFactor: "3.89",
   yieldBps: 3,
 };
 
@@ -33,10 +33,10 @@ const PHASE_DURATION: Record<Phase, number> = {
 const NARRATION: Record<Phase, string> = {
   0: "",
   1: "Your agent wants to make a payment. Review the spend plan.",
-  2: "Agent deposits $10 USDC. Swapped 50/50 into WETH + cbBTC and supplied to Aave V3.",
+  2: "Agent deposits $5 USDC into the treasury, supplied to Aave V3 as collateral.",
   3: "Collateral earns yield automatically. The treasury grows while the agent operates.",
   4: "CRE's decentralized network independently verifies the plan you approved.",
-  5: "Verified. Vault borrows $4 USDC from Aave and pays the service provider.",
+  5: "Verified. Vault borrows $1 USDC from Aave and pays the service provider.",
   6: "Done. Your agent earns, borrows, and pays — and you control every spend.",
 };
 
@@ -245,7 +245,7 @@ export default function StoryReplay() {
   const collateral = phase >= 2 ? `$${collateralDisplay.toFixed(2)}` : "—";
   const debt = phase >= 5 ? `$${debtDisplay.toFixed(2)}` : "$0.00";
   const hf = phase >= 5 ? STORY.healthFactor : phase >= 2 ? "∞" : "—";
-  const agentUsdc = phase >= 2 ? "$0.00" : "$10.00";
+  const agentUsdc = phase >= 2 ? "$0.00" : "$5.00";
 
   const finalCollateral = proof ? `$${proof.collateralUsd}` : collateral;
   const finalDebt = proof ? `$${proof.debtUsd}` : debt;
@@ -289,10 +289,12 @@ export default function StoryReplay() {
 
           <div className="mt-6">
             <a
-              href="/demo?live"
+              href="https://github.com/MSanchezWorld/agent-treasury"
+              target="_blank"
+              rel="noreferrer"
               className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
             >
-              or run it live with real funds →
+              Clone the repo to run it live with real funds →
             </a>
           </div>
         </div>
@@ -420,10 +422,12 @@ export default function StoryReplay() {
             <h1 className="text-lg font-semibold text-text-primary tracking-tight">Agent Treasury Demo</h1>
           </div>
           <a
-            href="/demo?live"
+            href="https://github.com/MSanchezWorld/agent-treasury"
+            target="_blank"
+            rel="noreferrer"
             className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
           >
-            Switch to Live →
+            GitHub →
           </a>
         </div>
 
@@ -664,8 +668,8 @@ export default function StoryReplay() {
                   )}
                 </div>
                 <div className="flex flex-col gap-2 shrink-0">
-                  <a href="/demo?live" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-xs font-semibold text-background hover:bg-accent-hover transition-colors">
-                    Run it live
+                  <a href="https://github.com/MSanchezWorld/agent-treasury" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-xs font-semibold text-background hover:bg-accent-hover transition-colors">
+                    View on GitHub
                     <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </a>
                 </div>
