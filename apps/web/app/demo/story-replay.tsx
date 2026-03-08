@@ -88,6 +88,7 @@ export default function StoryReplay() {
 
   // Live deposit
   const [depositing, setDepositing] = useState(false);
+  const [depositStep, setDepositStep] = useState<string | null>(null);
   const [depositTx, setDepositTx] = useState<string | null>(null);
   const [depositError, setDepositError] = useState<string | null>(null);
 
@@ -238,18 +239,31 @@ export default function StoryReplay() {
     setDepositing(true);
     setDepositTx(null);
     setDepositError(null);
+    setDepositStep("Connecting to Base mainnet…");
     try {
+      // Show progress steps while the API call runs
+      const stepTimer1 = setTimeout(() => setDepositStep("Approving USDC to vault…"), 2000);
+      const stepTimer2 = setTimeout(() => setDepositStep("Supplying $" + STORY.deposit + " USDC to Aave V3…"), 6000);
+      const stepTimer3 = setTimeout(() => setDepositStep("Waiting for on-chain confirmation…"), 12000);
+
       const res = await fetch("/api/demo/deposit", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ depositAmount: String(STORY.deposit * 1_000_000) }),
       });
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || "Deposit failed");
       }
+      setDepositStep("Confirmed! $" + json.depositUsd + " USDC deposited on Base.");
       setDepositTx(json.supplyTxHash);
     } catch (e) {
+      setDepositStep(null);
       setDepositError(e instanceof Error ? e.message : String(e));
     } finally {
       setDepositing(false);
@@ -335,8 +349,16 @@ export default function StoryReplay() {
             </button>
           </div>
 
+          {(depositing || depositStep) && !depositTx && !depositError && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent2 animate-pulse" />
+              <p className="text-[11px] text-text-secondary">{depositStep}</p>
+            </div>
+          )}
+
           {depositTx && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-1">
+              <p className="text-[11px] text-accent2 font-medium">{depositStep}</p>
               <a
                 href={`${BASESCAN}/tx/${depositTx}`}
                 target="_blank"
@@ -344,7 +366,7 @@ export default function StoryReplay() {
                 className="inline-flex items-center gap-1.5 text-[11px] text-accent2 hover:underline"
               >
                 <svg viewBox="0 0 12 12" className="w-3 h-3"><path d="M3 6l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Deposited! View on Basescan →
+                View on Basescan →
               </a>
             </div>
           )}
