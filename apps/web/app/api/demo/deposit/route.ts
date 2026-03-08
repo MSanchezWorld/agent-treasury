@@ -133,24 +133,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Approve USDC to vault (if needed)
-    let approveTxHash: Hash | null = null;
-    const currentAllowance = await publicClient.readContract({
+    // 1) Always approve USDC to vault (avoids stale RPC allowance reads)
+    const approveTxHash = await walletClient.writeContract({
       address: USDC,
       abi: erc20Abi,
-      functionName: "allowance",
-      args: [account.address, VAULT],
+      functionName: "approve",
+      args: [VAULT, amount],
     });
-
-    if (currentAllowance < amount) {
-      approveTxHash = await walletClient.writeContract({
-        address: USDC,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [VAULT, amount],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
-    }
+    await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
 
     // 2) Supply collateral to vault (vault calls Aave pool.supply internally)
     const supplyTxHash = await walletClient.writeContract({
