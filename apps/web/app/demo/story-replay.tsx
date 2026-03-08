@@ -236,6 +236,18 @@ export default function StoryReplay() {
 
   const fundTreasuryLive = useCallback(async () => {
     if (depositing) return;
+
+    const confirmed = window.confirm(
+      `This will deposit $${STORY.deposit} real USDC into the Agent Treasury vault on Base mainnet.\n\n` +
+      `What happens:\n` +
+      `1. USDC is approved and transferred from the agent wallet\n` +
+      `2. The vault supplies it to Aave V3 as collateral\n` +
+      `3. It starts earning yield immediately\n` +
+      `4. The agent can now borrow against it (via CRE verification)\n\n` +
+      `This is a real mainnet transaction. Continue?`
+    );
+    if (!confirmed) return;
+
     setDepositing(true);
     setDepositTx(null);
     setDepositError(null);
@@ -357,16 +369,19 @@ export default function StoryReplay() {
           )}
 
           {depositTx && (
-            <div className="mt-3 space-y-1">
-              <p className="text-[11px] text-accent2 font-medium">{depositStep}</p>
+            <div className="mt-3 rounded-xl border border-accent2/20 bg-accent2/5 px-4 py-3 text-center max-w-sm mx-auto">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <svg viewBox="0 0 12 12" className="w-3.5 h-3.5 text-accent2"><path d="M3 6l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <p className="text-xs text-accent2 font-semibold">${STORY.deposit} USDC deposited into Aave V3</p>
+              </div>
+              <p className="text-[11px] text-text-tertiary mb-2">Collateral is now earning yield on Base mainnet. The agent can borrow against it via CRE.</p>
               <a
                 href={`${BASESCAN}/tx/${depositTx}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[11px] text-accent2 hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] text-accent2 hover:underline"
               >
-                <svg viewBox="0 0 12 12" className="w-3 h-3"><path d="M3 6l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                View on Basescan →
+                Verify on Basescan →
               </a>
             </div>
           )}
