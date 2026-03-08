@@ -400,13 +400,14 @@ export default function HomePage() {
       {/* ─── Demo Video ─── */}
       <section className="mx-auto max-w-4xl px-6 pb-14" style={{ paddingTop: 0, marginTop: "-10px" }}>
         <div className="rounded-2xl border border-border bg-surface/40 backdrop-blur-sm overflow-hidden">
-          {/* Replace this placeholder with: <video src="/demo.mp4" ... /> or an iframe */}
-          <div className="aspect-video flex flex-col items-center justify-center gap-3 bg-black/20">
-            <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-text-tertiary/40">
-              <circle cx="24" cy="24" r="22" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M20 16l12 8-12 8V16z" fill="currentColor" />
-            </svg>
-            <p className="text-sm text-text-tertiary/60">Demo video coming soon</p>
+          <div className="aspect-video">
+            <iframe
+              src="https://www.youtube.com/embed/bk0eFZd68bg"
+              title="Agent Treasury Demo"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full"
+            />
           </div>
         </div>
       </section>

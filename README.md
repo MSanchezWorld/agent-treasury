@@ -8,6 +8,10 @@ Agent Treasury uses [Chainlink CRE](https://chain.link/cre) and [Aave V3](https:
 
 > The wealthy never sell — they borrow against what they own. Agent Treasury brings that model to AI agents.
 
+### Demo Video
+
+[![Agent Treasury Demo](https://img.youtube.com/vi/bk0eFZd68bg/maxresdefault.jpg)](https://youtu.be/bk0eFZd68bg)
+
 ---
 
 ## The Cycle
