@@ -15,8 +15,8 @@ export const maxDuration = 60;
 // Simple in-memory rate limit: one deposit per 2 minutes
 let lastDepositAtMs = 0;
 const DEPOSIT_COOLDOWN_MS = 120_000;
-// Hard cap: only allow deposits up to $5 (5_000_000 USDC units)
-const MAX_DEPOSIT_UNITS = 5_000_000n;
+// Hard cap: only allow deposits up to $3 (3_000_000 USDC units)
+const MAX_DEPOSIT_UNITS = 3_000_000n;
 
 const VAULT = "0x943b828468509765654EA502803DF7F0b21637c6" as const;
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;

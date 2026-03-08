@@ -10,7 +10,7 @@ Agent Treasury uses [Chainlink CRE](https://chain.link/cre) and [Aave V3](https:
 
 ### Demo Video
 
-[![Agent Treasury Demo](https://img.youtube.com/vi/bk0eFZd68bg/maxresdefault.jpg)](https://youtu.be/bk0eFZd68bg)
+[![Agent Treasury Demo](https://img.youtube.com/vi/S3W_R8ugaVA/maxresdefault.jpg)](https://youtu.be/S3W_R8ugaVA)
 
 **Live Site:** [agent-treasury.vercel.app](https://agent-treasury.vercel.app) | **Interactive Demo:** [agent-treasury.vercel.app/demo](https://agent-treasury.vercel.app/demo)
 
@@ -103,7 +103,7 @@ Every transaction is verifiable on Basescan — click to inspect on Base mainnet
 
 | Step | What Happened | Transaction |
 |------|--------------|-------------|
-| **Deposit** | 5 USDC supplied to Aave V3 as collateral | [`0x9356...2d7d`](https://basescan.org/tx/0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d) |
+| **Deposit** | USDC supplied to Aave V3 as collateral | [`0x9356...2d7d`](https://basescan.org/tx/0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d) |
 | **Borrow & Pay** | CRE verified plan → vault borrowed 1 USDC → paid payee | [`0xb562...3dab`](https://basescan.org/tx/0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab) |
 
 **6 total borrow-and-pay executions** across multiple cycles — all verified by Chainlink CRE's decentralized DON.
@@ -228,6 +228,37 @@ All files that use Chainlink CRE:
 | `yarn contracts:withdraw:base` | Withdraw collateral |
 | `yarn contracts:reset-aave:base` | Full reset (repay all + withdraw all) |
 | `yarn contracts:swap-to-usdc:base` | Swap collateral back to USDC |
+
+---
+
+## Production Architecture
+
+In production, CRE workflows don't run locally — they run on **Chainlink's Decentralized Oracle Network (DON)**.
+
+```
+ Web UI / Mobile App              Chainlink DON                  Base Mainnet
+       |                               |                              |
+  User approves                  Workflow runs on                Vault executes
+  spend plan                     independent nodes               borrow & pay
+       |                               |                              |
+       v                               v                              v
+ +-----------+    trigger    +------------------+    signed    +-------------+
+ | Approve   | -----------> | CRE Workflow     | ----------> | BorrowVault |
+ | Spend     |              | N nodes verify   |   report    | 12 checks   |
+ | Plan      |              | independently    |             | Aave borrow |
+ +-----------+              +------------------+             +-------------+
+```
+
+**How it works in production:**
+1. **User approves** a spend plan via the web UI (or mobile app)
+2. **Approval triggers a CRE workflow** deployed on Chainlink's DON — a network of independent nodes, not your server
+3. **DON nodes independently verify** the plan — payee allowlist, amounts, health factor, nonce
+4. **Consensus reached** — the DON sends a signed report to the Receiver contract on-chain
+5. **Vault executes** — borrows from Aave, pays the payee, all 12 safety checks enforced
+
+**Why the live demo only runs deposits:** The `executeBorrowAndPay` function is locked to the CRE Receiver contract — no single party (including the server or wallet owner) can call it. This is the core security model. The `cre workflow simulate` command used locally is a development tool that simulates what the DON does in production. CRE is in early access, so there's no public DON deployment yet — expected for a hackathon project building on pre-release infrastructure.
+
+**Proof it works:** 6 real borrow-and-pay executions were completed via CRE locally and are verifiable on Basescan (see [Live On-Chain Proof](#live-on-chain-proof)).
 
 ---
 

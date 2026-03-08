@@ -8,12 +8,12 @@ const DEFAULT_VAULT = "0x943b828468509765654EA502803DF7F0b21637c6";
 const BASESCAN = "https://basescan.org";
 
 const STORY = {
-  deposit: 5,
+  deposit: 3,
   borrow: 1,
   payee: "0x4244...Bc6d",
-  collateralUsd: 4.98,
+  collateralUsd: 2.99,
   debtUsd: 1.0,
-  healthFactor: "3.89",
+  healthFactor: "2.24",
   yieldBps: 3,
 };
 
@@ -91,6 +91,38 @@ export default function StoryReplay() {
   const [depositStep, setDepositStep] = useState<string | null>(null);
   const [depositTx, setDepositTx] = useState<string | null>(null);
   const [depositError, setDepositError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Live wallet state
+  const [walletState, setWalletState] = useState<{
+    walletUsdc: string; collateralUsd: string; debtUsd: string; healthFactor: string;
+  } | null>(null);
+
+  const fetchWalletState = useCallback(() => {
+    fetch(`/api/proof?payee=${encodeURIComponent(DEFAULT_PAYEE)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        if (!json?.ok || !json?.proof) return;
+        const p = json.proof;
+        const baseDec = p?.oracle?.baseDecimals ?? 8;
+        const collBase = BigInt(p?.aave?.userAccountData?.totalCollateralBase ?? "0");
+        const debtBase = BigInt(p?.aave?.userAccountData?.totalDebtBase ?? "0");
+        const hf = BigInt(p?.aave?.userAccountData?.healthFactor ?? "0");
+        const walletBal = BigInt(p?.wallet?.owner?.usdc ?? "0");
+        const fmt = (v: bigint, dec: number) => (Number(v) / 10 ** dec).toFixed(2);
+        setWalletState({
+          walletUsdc: fmt(walletBal, p?.usdc?.decimals ?? 6),
+          collateralUsd: fmt(collBase, baseDec),
+          debtUsd: fmt(debtBase, baseDec),
+          healthFactor: debtBase === 0n ? "∞" : (Number(hf) / 1e18).toFixed(2),
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch on mount + after deposit
+  useEffect(() => { fetchWalletState(); }, [fetchWalletState]);
+  useEffect(() => { if (depositTx) fetchWalletState(); }, [depositTx, fetchWalletState]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yieldRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -234,26 +266,18 @@ export default function StoryReplay() {
     setCheckMarks(0);
   }, []);
 
-  const fundTreasuryLive = useCallback(async () => {
+  const fundTreasuryLive = useCallback(() => {
     if (depositing) return;
+    setShowConfirm(true);
+  }, [depositing]);
 
-    const confirmed = window.confirm(
-      `This will deposit $${STORY.deposit} real USDC into the Agent Treasury vault on Base mainnet.\n\n` +
-      `What happens:\n` +
-      `1. USDC is approved and transferred from the agent wallet\n` +
-      `2. The vault supplies it to Aave V3 as collateral\n` +
-      `3. It starts earning yield immediately\n` +
-      `4. The agent can now borrow against it (via CRE verification)\n\n` +
-      `This is a real mainnet transaction. Continue?`
-    );
-    if (!confirmed) return;
-
+  const executeDeposit = useCallback(async () => {
+    setShowConfirm(false);
     setDepositing(true);
     setDepositTx(null);
     setDepositError(null);
     setDepositStep("Connecting to Base mainnet…");
     try {
-      // Show progress steps while the API call runs
       const stepTimer1 = setTimeout(() => setDepositStep("Approving USDC to vault…"), 2000);
       const stepTimer2 = setTimeout(() => setDepositStep("Supplying $" + STORY.deposit + " USDC to Aave V3…"), 6000);
       const stepTimer3 = setTimeout(() => setDepositStep("Waiting for on-chain confirmation…"), 12000);
@@ -280,7 +304,7 @@ export default function StoryReplay() {
     } finally {
       setDepositing(false);
     }
-  }, [depositing]);
+  }, []);
 
   const approveSpend = useCallback(() => {
     setPhase(2); // approved → start execution
@@ -311,9 +335,109 @@ export default function StoryReplay() {
 
   const showBoard = phase >= 2;
 
+  // Confirmation modal (shared across phases)
+  const confirmModal = showConfirm && (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      >
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm(false)} />
+
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.95 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="relative w-full max-w-md rounded-2xl border border-accent2/30 bg-surface shadow-2xl shadow-black/40 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-accent/15 border border-accent/25">
+                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-accent">
+                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Spend Plan</p>
+                <p className="text-[11px] text-text-tertiary">Your agent is requesting approval</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-5 pb-4">
+            <div className="rounded-xl bg-black/20 border border-border/50 p-4 mb-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Action</span>
+                <span className="text-sm text-text-primary font-medium">Deposit, Borrow &amp; Pay</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Deposit</span>
+                <span className="text-sm text-text-primary font-semibold mono">${STORY.deposit}.00 USDC</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Borrow</span>
+                <span className="text-sm text-text-primary font-semibold mono">${STORY.borrow}.00 USDC</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Pay to</span>
+                <span className="text-sm text-text-primary mono">{STORY.payee}</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Reason</span>
+                <span className="text-sm text-text-primary">Service provider payment</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Source</span>
+                <span className="text-sm text-text-primary">Borrow against collateral</span>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-accent2/[0.08] border border-accent2/20 px-3 py-2 mb-4">
+              <p className="text-[11px] text-accent2 leading-relaxed">
+                The agent cannot move funds without your approval. After you approve, CRE&apos;s decentralized network will independently verify the plan before execution.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={executeDeposit}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-background hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/20 transition-all cursor-pointer"
+              >
+                <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4">
+                  <path d="M5 10l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Approve Spend
+              </button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="rounded-xl border border-border px-4 py-2.5 text-sm text-text-tertiary hover:text-text-secondary hover:border-border-strong transition-all cursor-pointer"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+
   // --- Phase 0: centered start screen ---
   if (phase === 0) {
     return (
+      <>
+      {confirmModal}
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md px-5">
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -326,10 +450,31 @@ export default function StoryReplay() {
           <h1 className="text-2xl sm:text-3xl font-bold text-text-primary tracking-tight leading-tight mb-3">
             Hold assets. Earn yield.<br />Borrow to spend.
           </h1>
-          <p className="text-sm text-text-secondary leading-relaxed mb-8">
+          <p className="text-sm text-text-secondary leading-relaxed mb-5">
             The wealthy never sell — they borrow against what they own.
             Watch an AI agent do the same, and <span className="text-accent font-medium">you approve every spend</span>.
           </p>
+
+          {/* Live wallet status — above buttons so user sees balance before deciding */}
+          {walletState ? (
+            <div className="rounded-xl border border-border/40 bg-surface/60 backdrop-blur-sm px-4 py-3 mb-6 max-w-sm mx-auto">
+              <p className="text-[10px] text-text-tertiary uppercase tracking-wider font-medium mb-2">Live Treasury — Base Mainnet</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-left">
+                <span className="text-[11px] text-text-tertiary">Agent Wallet</span>
+                <span className="text-[11px] text-text-primary font-medium mono text-right">${walletState.walletUsdc} USDC</span>
+                <span className="text-[11px] text-text-tertiary">Vault Collateral</span>
+                <span className="text-[11px] text-text-primary font-medium mono text-right">${walletState.collateralUsd}</span>
+                <span className="text-[11px] text-text-tertiary">Vault Debt</span>
+                <span className="text-[11px] text-text-primary font-medium mono text-right">${walletState.debtUsd}</span>
+                <span className="text-[11px] text-text-tertiary">Health Factor</span>
+                <span className="text-[11px] text-text-primary font-medium mono text-right">{walletState.healthFactor}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6">
+              <span className="text-[11px] text-text-tertiary">Loading on-chain state…</span>
+            </div>
+          )}
 
           <button
             onClick={startReplay}
@@ -402,6 +547,7 @@ export default function StoryReplay() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
@@ -516,6 +662,8 @@ export default function StoryReplay() {
 
   // --- Phases 2-6: board view ---
   return (
+    <>
+    {confirmModal}
     <div className="min-h-screen flex flex-col justify-center">
       <main className="mx-auto w-full max-w-5xl px-5 py-8">
         {/* Header */}
@@ -549,6 +697,79 @@ export default function StoryReplay() {
             </motion.p>
           </AnimatePresence>
         </div>
+
+        {/* Spend Plan Tracker — vertical layout matching Phase 1 */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="rounded-2xl border border-border/40 bg-surface/80 backdrop-blur-md px-5 py-4 mb-4 shadow-lg shadow-black/10"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-accent/15 border border-accent/25">
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-accent">
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Spend Plan</p>
+              <p className="text-[11px] text-text-tertiary">
+                {phase === 6 ? "All steps completed" : phase >= 4 ? "CRE verifying…" : "Executing approved plan"}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-black/20 border border-border/50 divide-y divide-border/30 overflow-hidden">
+            {([
+              { label: "Action", value: "Deposit, Borrow & Pay", activePhase: 2 as Phase, donePhase: 6 as Phase },
+              { label: "Deposit", value: `$${STORY.deposit}.00 USDC`, activePhase: 2 as Phase, donePhase: 3 as Phase },
+              { label: "Borrow", value: `$${STORY.borrow}.00 USDC`, activePhase: 5 as Phase, donePhase: 6 as Phase },
+              { label: "Pay to", value: STORY.payee, activePhase: 5 as Phase, donePhase: 6 as Phase },
+              { label: "Reason", value: "Service provider payment", activePhase: 4 as Phase, donePhase: 5 as Phase },
+              { label: "Source", value: "Borrow against collateral", activePhase: 5 as Phase, donePhase: 6 as Phase },
+            ]).map((row) => {
+              const isActive = phase >= row.activePhase && phase < row.donePhase;
+              const isDone = phase >= row.donePhase;
+              return (
+                <motion.div
+                  key={row.label}
+                  animate={{
+                    backgroundColor: isActive ? "rgba(124, 255, 171, 0.06)" : "transparent",
+                  }}
+                  transition={{ duration: 0.4 }}
+                  className="flex justify-between items-center px-4 py-2.5 relative overflow-hidden"
+                >
+                  {isActive && (
+                    <motion.div
+                      className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent2"
+                      initial={{ scaleY: 0 }}
+                      animate={{ scaleY: 1 }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  )}
+                  {isDone && (
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent2/30" />
+                  )}
+                  <div className="flex items-center gap-2">
+                    {isDone ? (
+                      <svg viewBox="0 0 12 12" className="w-3.5 h-3.5 text-accent2 shrink-0">
+                        <path d="M3 6l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : isActive ? (
+                      <span className="h-2 w-2 rounded-full bg-accent2 animate-pulse shrink-0" />
+                    ) : null}
+                    <span className={`text-[11px] uppercase tracking-wider ${isActive ? "text-accent2 font-medium" : isDone ? "text-accent2/60" : "text-text-tertiary"}`}>
+                      {row.label}
+                    </span>
+                  </div>
+                  <span className={`text-sm font-medium mono ${isActive ? "text-text-primary" : isDone ? "text-text-secondary" : "text-text-tertiary"}`}>
+                    {row.value}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
 
         {/* Board */}
         <motion.div
@@ -828,5 +1049,6 @@ export default function StoryReplay() {
         <p className="text-[10px] text-text-tertiary/50">Agent Treasury — CRE Hackathon 2026 · Base · Aave V3</p>
       </footer>
     </div>
+    </>
   );
 }

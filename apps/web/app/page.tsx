@@ -402,7 +402,7 @@ export default function HomePage() {
         <div className="rounded-2xl border border-border bg-surface/40 backdrop-blur-sm overflow-hidden">
           <div className="aspect-video">
             <iframe
-              src="https://www.youtube-nocookie.com/embed/bk0eFZd68bg?rel=0&modestbranding=1&showinfo=0"
+              src="https://www.youtube-nocookie.com/embed/S3W_R8ugaVA?rel=0&modestbranding=1&showinfo=0"
               title="Agent Treasury Demo"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
