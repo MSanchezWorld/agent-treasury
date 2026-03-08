@@ -97,6 +97,21 @@ Every borrow passes through all of these — enforced in the BorrowVault contrac
 
 ---
 
+## Live On-Chain Proof
+
+Every transaction below is verifiable on Basescan. This is a complete deposit → borrow → pay → repay → withdraw cycle on Base mainnet:
+
+| Step | What Happened | Transaction |
+|------|--------------|-------------|
+| **Deposit** | 5 USDC supplied to Aave V3 as collateral | [`0x9356...2d7d`](https://basescan.org/tx/0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d) |
+| **Borrow & Pay** | CRE verified plan → vault borrowed 1 USDC → paid payee | [`0xb562...3dab`](https://basescan.org/tx/0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab) |
+| **Repay** | 1 USDC debt repaid to Aave V3 | [`0x6d10...af9d`](https://basescan.org/tx/0x6d10ecf41134bc0f5061cd747540ca000d72350420258e82f6912398699baf9d) |
+| **Withdraw** | 4.99 USDC collateral withdrawn back to wallet | [`0x84d5...d1aa`](https://basescan.org/tx/0x84d50e773aa75fdfcc22562a5222174ac3f3e485455034bc9e0c4b454b66d1aa) |
+
+**6 total borrow-and-pay executions** across multiple cycles — all verified by Chainlink CRE's decentralized DON.
+
+---
+
 ## Contracts (Base Mainnet)
 
 | Contract | Address |

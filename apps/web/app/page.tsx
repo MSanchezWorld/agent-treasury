@@ -412,6 +412,48 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ─── On-Chain Proof ─── */}
+      <section className="mx-auto max-w-4xl px-6 pb-14">
+        <div className="text-center mb-6">
+          <p className="text-accent2 text-xs font-medium tracking-widest uppercase mb-2">Verified On-Chain</p>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+            Live Transaction Proof
+          </h2>
+          <p className="text-text-secondary text-xs mt-2 max-w-md mx-auto">
+            A complete deposit → borrow → pay → repay → withdraw cycle on Base mainnet. Click any transaction to verify on Basescan.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { step: "Deposit", detail: "5 USDC → Aave V3", tx: "0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d", color: "accent" as const },
+            { step: "Borrow & Pay", detail: "1 USDC → Payee", tx: "0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab", color: "purple" as const },
+            { step: "Repay", detail: "1 USDC debt cleared", tx: "0x6d10ecf41134bc0f5061cd747540ca000d72350420258e82f6912398699baf9d", color: "amber" as const },
+            { step: "Withdraw", detail: "4.99 USDC → Wallet", tx: "0x84d50e773aa75fdfcc22562a5222174ac3f3e485455034bc9e0c4b454b66d1aa", color: "accent2" as const },
+          ].map((item) => {
+            const c = colorMap[item.color];
+            return (
+              <a
+                key={item.step}
+                href={`https://basescan.org/tx/${item.tx}`}
+                target="_blank"
+                rel="noreferrer"
+                className={`group rounded-xl border ${c.border} ${c.bg} p-4 transition-all hover:shadow-lg hover:${c.glow} hover:scale-[1.02]`}
+              >
+                <p className={`text-[11px] font-medium uppercase tracking-wider ${c.text} mb-1`}>{item.step}</p>
+                <p className="text-xs text-text-secondary mb-2">{item.detail}</p>
+                <p className="text-[10px] font-mono text-text-tertiary group-hover:text-text-secondary transition-colors truncate">
+                  {item.tx.slice(0, 10)}...{item.tx.slice(-8)}
+                </p>
+              </a>
+            );
+          })}
+        </div>
+        <p className="text-center text-[11px] text-text-tertiary mt-3">
+          6 total borrow-and-pay executions across multiple cycles — all verified by Chainlink CRE
+        </p>
+      </section>
+
       {/* ─── Process Timeline ─── */}
       <main className="mx-auto max-w-5xl px-6" id="process" style={{ scrollMarginTop: "3rem" }}>
         <div className="mb-12 text-center">
