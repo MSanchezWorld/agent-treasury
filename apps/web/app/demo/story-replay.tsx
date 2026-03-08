@@ -86,6 +86,11 @@ export default function StoryReplay() {
   const [yieldTick, setYieldTick] = useState(0);
   const [checkMarks, setCheckMarks] = useState(0);
 
+  // Live deposit
+  const [depositing, setDepositing] = useState(false);
+  const [depositTx, setDepositTx] = useState<string | null>(null);
+  const [depositError, setDepositError] = useState<string | null>(null);
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yieldRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -228,6 +233,29 @@ export default function StoryReplay() {
     setCheckMarks(0);
   }, []);
 
+  const fundTreasuryLive = useCallback(async () => {
+    if (depositing) return;
+    setDepositing(true);
+    setDepositTx(null);
+    setDepositError(null);
+    try {
+      const res = await fetch("/api/demo/deposit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ depositAmount: String(STORY.deposit * 1_000_000) }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Deposit failed");
+      }
+      setDepositTx(json.supplyTxHash);
+    } catch (e) {
+      setDepositError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDepositing(false);
+    }
+  }, [depositing]);
+
   const approveSpend = useCallback(() => {
     setPhase(2); // approved → start execution
   }, []);
@@ -287,14 +315,52 @@ export default function StoryReplay() {
             </svg>
           </button>
 
-          <div className="mt-6">
+          <div className="mt-4">
+            <button
+              onClick={fundTreasuryLive}
+              disabled={depositing}
+              className="inline-flex items-center gap-2 rounded-full border border-accent2/30 bg-accent2/10 px-6 py-2.5 text-sm font-medium text-accent2 hover:bg-accent2/20 hover:border-accent2/50 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {depositing ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-accent2 animate-pulse" />
+                  Depositing ${STORY.deposit} USDC on Base…
+                </>
+              ) : (
+                <>
+                  Fund Treasury Live — ${STORY.deposit} USDC
+                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </>
+              )}
+            </button>
+          </div>
+
+          {depositTx && (
+            <div className="mt-3">
+              <a
+                href={`${BASESCAN}/tx/${depositTx}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-[11px] text-accent2 hover:underline"
+              >
+                <svg viewBox="0 0 12 12" className="w-3 h-3"><path d="M3 6l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Deposited! View on Basescan →
+              </a>
+            </div>
+          )}
+
+          {depositError && (
+            <p className="mt-3 text-[11px] text-red-400">{depositError}</p>
+          )}
+
+          <div className="mt-4">
             <a
               href="https://github.com/MSanchezWorld/agent-treasury"
               target="_blank"
               rel="noreferrer"
               className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
             >
-              Clone the repo to run it live with real funds →
+              Clone the repo to run the full CRE flow locally →
             </a>
           </div>
         </div>
@@ -668,6 +734,18 @@ export default function StoryReplay() {
                   )}
                 </div>
                 <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    onClick={fundTreasuryLive}
+                    disabled={depositing}
+                    className="inline-flex items-center gap-2 rounded-full bg-accent2 px-5 py-2 text-xs font-semibold text-background hover:opacity-90 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {depositing ? "Depositing…" : `Fund Treasury — $${STORY.deposit}`}
+                  </button>
+                  {depositTx && (
+                    <a href={`${BASESCAN}/tx/${depositTx}`} target="_blank" rel="noreferrer" className="text-[10px] text-accent2 hover:underline text-center">
+                      View deposit tx →
+                    </a>
+                  )}
                   <a href="https://github.com/MSanchezWorld/agent-treasury" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-xs font-semibold text-background hover:bg-accent-hover transition-colors">
                     View on GitHub
                     <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>

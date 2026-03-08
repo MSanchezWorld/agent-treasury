@@ -1,85 +1,42 @@
 import { NextResponse } from "next/server";
-import { spawn } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import { requireSharedSecret } from "../../_auth";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  parseAbi,
+  type Hash,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
-const BASE_RPC_CANDIDATES = [
-  // Base's official RPC can rate-limit (429) during hackathon traffic. These tend to be more stable for demos.
+// Simple in-memory rate limit: one deposit per 2 minutes
+let lastDepositAtMs = 0;
+const DEPOSIT_COOLDOWN_MS = 120_000;
+// Hard cap: only allow deposits up to $5 (5_000_000 USDC units)
+const MAX_DEPOSIT_UNITS = 5_000_000n;
+
+const VAULT = "0x943b828468509765654EA502803DF7F0b21637c6" as const;
+const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+
+const RPC_CANDIDATES = [
+  "https://mainnet.base.org",
   "https://base.drpc.org",
   "https://base-rpc.publicnode.com",
-  "https://base.publicnode.com",
-  "https://mainnet.base.org"
 ];
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const erc20Abi = parseAbi([
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+]);
 
-function looksLikeTransientRpcFailure(out: string): boolean {
-  const s = out.toLowerCase();
-  return (
-    s.includes("temporary internal error") ||
-    s.includes("headers timeouterror") ||
-    s.includes("headers_timeout") ||
-    s.includes("etimedout") ||
-    s.includes("econnreset") ||
-    s.includes("socket hang up") ||
-    s.includes("429") ||
-    s.includes("rate limit") ||
-    s.includes("bad_data") ||
-    s.includes("timeout") ||
-    s.includes("undici") ||
-    s.includes("fetch failed")
-  );
-}
-
-function looksLikeTxSent(out: string): boolean {
-  const s = out.toLowerCase();
-  // Only treat value-moving txs as "sent". Approvals are idempotent and safe to retry, but swaps/supplies
-  // could duplicate value transfers if re-run.
-  return s.includes("[swap] tx:") || s.includes("[supply] tx:");
-}
-
-function extractErrorSummary(stdout: string, stderr: string): string {
-  const combined = `${stderr}\n${stdout}`;
-  const lines = combined
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  // Prefer explicit summaries from our scripts if present.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]!;
-    if (/\[error summary\]/i.test(l)) return l.replace(/^\[error summary\]\s*/i, "");
-  }
-
-  // Otherwise find the last useful error-looking line.
-  const patterns: Array<[RegExp, string]> = [
-    [/insufficient funds/i, "Insufficient ETH for gas. Fund the signer with Base ETH."],
-    [/too little received|slippage/i, "Swap slippage too tight. Increase SLIPPAGE_BPS (e.g. 200)."],
-    [/no uniswap v3 pool/i, "No Uniswap V3 pool found for this swap pair on Base."],
-    [/failed to query uniswap v3 pools/i, "RPC returned invalid data querying pools. Try again or use a different BASE_RPC_URL_OVERRIDE."],
-    [/nonce too low|replacement transaction underpriced/i, "Nonce/fee issue. Wait a moment and retry; if it persists, reset nonce or bump fees."],
-    [/execution reverted|revert/i, "Transaction would revert. Expand the technical details to see the underlying reason."]
-  ];
-
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]!;
-    for (const [re, hint] of patterns) {
-      if (re.test(l)) return `${l} (hint: ${hint})`;
-    }
-  }
-
-  // Fallback: return the last non-stack line if possible.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]!;
-    if (!/^\s*at\s+/.test(l)) return l;
-  }
-  return "Unknown failure (no error message captured)";
-}
+const vaultAbi = parseAbi([
+  "function supplyCollateral(address asset, uint256 amount) external",
+  "function owner() external view returns (address)",
+]);
 
 function toUIntString(v: unknown): string | null {
   if (typeof v === "number") {
@@ -90,166 +47,131 @@ function toUIntString(v: unknown): string | null {
   return null;
 }
 
-function findRepoRoot(): string {
-  // In dev, Next runs with cwd at apps/web. In case it's different, search upwards for `cre/project.yaml`.
-  let dir = process.cwd();
-  for (let i = 0; i < 6; i++) {
-    const candidate = path.join(dir, "cre", "project.yaml");
-    if (fs.existsSync(candidate)) return dir;
-    dir = path.dirname(dir);
-  }
-  return path.resolve(process.cwd(), "..", "..");
-}
-
-function loadDotEnvFile(envPath: string): Record<string, string> {
-  if (!fs.existsSync(envPath)) return {};
-  const out: Record<string, string> = {};
-  const raw = fs.readFileSync(envPath, "utf-8");
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let val = trimmed.slice(eq + 1).trim();
-    if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (!key) continue;
-    out[key] = val;
-  }
-  return out;
-}
-
-async function runDeposit({
-  repoRoot,
-  confirmMainnet,
-  depositMode,
-  depositAmount,
-  allocEthBps,
-  allocBtcBps,
-  rpcUrl
-}: {
-  repoRoot: string;
-  confirmMainnet: boolean;
-  depositMode: "usdc" | "eth_btc";
-  depositAmount: string;
-  allocEthBps?: string | null;
-  allocBtcBps?: string | null;
-  rpcUrl?: string;
-}) {
-  const args = [depositMode === "eth_btc" ? "contracts:deposit-swap:base" : "contracts:deposit:base"];
-  const repoEnv = loadDotEnvFile(path.join(repoRoot, ".env"));
-  const env: NodeJS.ProcessEnv = { ...process.env, ...repoEnv };
-
-  if (rpcUrl) env.BASE_RPC_URL = rpcUrl;
-  if (confirmMainnet) env.CONFIRM_MAINNET = "YES";
-  // Demo-friendly default: if not set, allow a bit more slippage to reduce flaky revert-on-estimateGas.
-  if (!String(env.SLIPPAGE_BPS || "").trim()) env.SLIPPAGE_BPS = "200";
-  // The workspace scripts set the safe defaults for DEPOSIT_MODE/ALLOW_SWAP_DEPOSIT.
-  // We still pass through mode and allocation so the CLI output is self-describing.
-  env.DEPOSIT_MODE = depositMode;
-  env.ALLOW_SWAP_DEPOSIT = depositMode === "eth_btc" ? "true" : "false";
-  env.DEPOSIT_AMOUNT = depositAmount;
-  if (allocEthBps) env.ALLOC_ETH_BPS = allocEthBps;
-  if (allocBtcBps) env.ALLOC_BTC_BPS = allocBtcBps;
-
-  const startedAtMs = Date.now();
-  const child = spawn("yarn", args, { cwd: repoRoot, env });
-
-  const MAX = 24_000;
-  let stdout = "";
-  let stderr = "";
-
-  child.stdout.on("data", (d) => {
-    stdout += String(d);
-    if (stdout.length > MAX) stdout = stdout.slice(-MAX);
-  });
-  child.stderr.on("data", (d) => {
-    stderr += String(d);
-    if (stderr.length > MAX) stderr = stderr.slice(-MAX);
-  });
-
-  const exitCode: number = await new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", (code) => resolve(code ?? 1));
-  });
-
-  const finishedAtMs = Date.now();
-  return { startedAtMs, finishedAtMs, exitCode, stdout, stderr };
-}
-
 export async function POST(req: Request) {
   try {
-    const enabled = process.env.ENABLE_RESET_RUNNER === "true" || process.env.NODE_ENV !== "production";
-    if (!enabled) {
+    const pk = (process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY || "").trim();
+    if (!pk) {
       return NextResponse.json(
-        { ok: false, error: "Deposit runner disabled (set ENABLE_RESET_RUNNER=true to enable in production)." },
+        { ok: false, error: "Server not configured: missing PRIVATE_KEY" },
+        { status: 500 }
+      );
+    }
+
+    const body = (await req.json()) as any;
+    const depositAmount = toUIntString(body?.depositAmount);
+    if (!depositAmount || depositAmount === "0") {
+      return NextResponse.json(
+        { ok: false, error: "Invalid depositAmount (expected integer string in USDC units, e.g. '5000000' for $5)" },
+        { status: 400 }
+      );
+    }
+
+    const amount = BigInt(depositAmount);
+
+    // Rate limit
+    const now = Date.now();
+    if (now - lastDepositAtMs < DEPOSIT_COOLDOWN_MS) {
+      const waitSec = Math.ceil((DEPOSIT_COOLDOWN_MS - (now - lastDepositAtMs)) / 1000);
+      return NextResponse.json(
+        { ok: false, error: `Rate limited — try again in ${waitSec}s` },
+        { status: 429 }
+      );
+    }
+
+    // Cap deposit size
+    if (amount > MAX_DEPOSIT_UNITS) {
+      return NextResponse.json(
+        { ok: false, error: `Demo deposits capped at $${Number(MAX_DEPOSIT_UNITS) / 1e6}` },
+        { status: 400 }
+      );
+    }
+
+    const account = privateKeyToAccount(pk.startsWith("0x") ? pk as `0x${string}` : `0x${pk}`);
+
+    // Try RPC candidates until one works
+    const rpcUrl = process.env.BASE_RPC_URL_OVERRIDE?.trim() || RPC_CANDIDATES[0]!;
+
+    const publicClient = createPublicClient({
+      chain: base,
+      transport: http(rpcUrl),
+    });
+
+    const walletClient = createWalletClient({
+      account,
+      chain: base,
+      transport: http(rpcUrl),
+    });
+
+    // Verify this account is the vault owner
+    const owner = await publicClient.readContract({
+      address: VAULT,
+      abi: vaultAbi,
+      functionName: "owner",
+    });
+
+    if (owner.toLowerCase() !== account.address.toLowerCase()) {
+      return NextResponse.json(
+        { ok: false, error: `Signer ${account.address} is not the vault owner (${owner})` },
         { status: 403 }
       );
     }
 
-    const authErr = requireSharedSecret(req, {
-      envVar: "DEMO_RUNNER_SECRET",
-      headerName: "x-demo-runner-secret",
-      allowInDevWithoutSecret: true
+    // Check USDC balance
+    const balance = await publicClient.readContract({
+      address: USDC,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [account.address],
     });
-    if (authErr) return authErr;
 
-    const body = (await req.json()) as any;
-    const confirmMainnet = body?.confirmMainnet === true;
-    const depositModeRaw = String(body?.depositMode || "usdc").trim().toLowerCase();
-    const depositMode = depositModeRaw === "eth_btc" ? "eth_btc" : depositModeRaw === "usdc" ? "usdc" : null;
-    if (!depositMode) {
-      return NextResponse.json({ ok: false, error: "Invalid depositMode (expected \"usdc\" or \"eth_btc\")" }, { status: 400 });
-    }
-    const depositAmount = toUIntString(body?.depositAmount);
-    if (!depositAmount || depositAmount === "0") {
-      return NextResponse.json({ ok: false, error: "Invalid depositAmount (expected integer string in token units)" }, { status: 400 });
+    if (balance < amount) {
+      const needed = Number(amount) / 1e6;
+      const have = Number(balance) / 1e6;
+      return NextResponse.json(
+        { ok: false, error: `Insufficient USDC: need $${needed.toFixed(2)}, have $${have.toFixed(2)}` },
+        { status: 400 }
+      );
     }
 
-    const allocEthBps = body?.allocEthBps == null ? null : toUIntString(body.allocEthBps);
-    const allocBtcBps = body?.allocBtcBps == null ? null : toUIntString(body.allocBtcBps);
-    if (body?.allocEthBps != null && !allocEthBps) {
-      return NextResponse.json({ ok: false, error: "Invalid allocEthBps" }, { status: 400 });
-    }
-    if (body?.allocBtcBps != null && !allocBtcBps) {
-      return NextResponse.json({ ok: false, error: "Invalid allocBtcBps" }, { status: 400 });
-    }
+    // 1) Approve USDC to vault (if needed)
+    let approveTxHash: Hash | null = null;
+    const currentAllowance = await publicClient.readContract({
+      address: USDC,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [account.address, VAULT],
+    });
 
-    const repoRoot = findRepoRoot();
-    const explicitRpcOverride = (process.env.BASE_RPC_URL_OVERRIDE || "").trim();
-    const rpcCandidates = explicitRpcOverride ? [explicitRpcOverride] : BASE_RPC_CANDIDATES;
-
-    const attempts: any[] = [];
-    for (let i = 0; i < rpcCandidates.length; i++) {
-      const rpcUrl = rpcCandidates[i]!;
-      const res = await runDeposit({ repoRoot, confirmMainnet, depositMode, depositAmount, allocEthBps, allocBtcBps, rpcUrl });
-      attempts.push({ rpcUrl, ...res });
-      if (res.exitCode === 0) {
-        return NextResponse.json(
-          { ok: true, confirmMainnet, depositMode, depositAmount, allocEthBps, allocBtcBps, attempts, ...res },
-          { status: 200 }
-        );
-      }
-
-      const tail = `${res.stderr}\n${res.stdout}`.slice(-4000);
-      const txSent = looksLikeTxSent(`${res.stdout}\n${res.stderr}`);
-      const transient = looksLikeTransientRpcFailure(tail);
-
-      // Never auto-retry if we've already broadcast a tx: re-running the script could duplicate
-      // swaps/supplies on mainnet. Only retry when nothing was sent (estimateGas/quote failures).
-      if (txSent) break;
-      await sleep(700 + i * 500);
+    if (currentAllowance < amount) {
+      approveTxHash = await walletClient.writeContract({
+        address: USDC,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [VAULT, amount],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
     }
 
-    const last = attempts[attempts.length - 1] || { exitCode: 1, stdout: "", stderr: "" };
-    const summary = extractErrorSummary(String(last.stdout || ""), String(last.stderr || ""));
-    const txSent = looksLikeTxSent(`${String(last.stdout || "")}\n${String(last.stderr || "")}`);
-    return NextResponse.json(
-      { ok: false, confirmMainnet, depositMode, depositAmount, allocEthBps, allocBtcBps, attempts, summary, txSent, ...last },
-      { status: 500 }
-    );
+    // 2) Supply collateral to vault (vault calls Aave pool.supply internally)
+    const supplyTxHash = await walletClient.writeContract({
+      address: VAULT,
+      abi: vaultAbi,
+      functionName: "supplyCollateral",
+      args: [USDC, amount],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: supplyTxHash });
+    lastDepositAtMs = Date.now();
+
+    return NextResponse.json({
+      ok: true,
+      depositAmount,
+      depositUsd: (Number(amount) / 1e6).toFixed(2),
+      approveTxHash,
+      supplyTxHash,
+      blockNumber: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

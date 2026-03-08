@@ -11,12 +11,8 @@ function isUIntString(v: unknown): v is string {
   return typeof v === "string" && /^[0-9]+$/.test(v);
 }
 
-function isUsdcHuman(v: unknown): v is string {
-  return typeof v === "string" && /^[0-9]+(\.[0-9]{0,6})?$/.test(v.trim());
-}
-
-// Minimal deterministic "agent" endpoint.
-// CRE workflow calls this over HTTP; the vault + workflow enforce safety constraints.
+// Agent decision logic — evaluates spend requests instead of blindly echoing them.
+// CRE + on-chain vault enforce hard safety constraints; the agent applies soft economic reasoning.
 export async function POST(req: Request) {
   try {
     const authErr = requireSharedSecret(req, {
@@ -28,7 +24,6 @@ export async function POST(req: Request) {
 
     const input = (await req.json()) as any;
     const spendRequest = input?.spendRequest;
-    const treasuryPlan = input?.treasuryPlan;
     const vault = input?.vault;
 
     const borrowAsset = spendRequest?.borrowAsset;
@@ -50,25 +45,63 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid vault.currentNonce" }, { status: 400 });
     }
 
-    const depositRaw = String(treasuryPlan?.depositUsdc ?? "");
-    const depositHuman = String(treasuryPlan?.depositHuman ?? "");
-    const depositNote = isUsdcHuman(depositHuman)
-      ? `deposit=${depositHuman} USDC`
-      : isUIntString(depositRaw)
-        ? `depositRaw=${depositRaw}`
-        : "";
+    // ── Agent Decision Logic ──
+    const borrowAmountBig = BigInt(borrowAmount);
+    const USDC_DECIMALS = 6;
+    const borrowUsd = Number(borrowAmountBig) / 10 ** USDC_DECIMALS;
 
-    // Deterministic MVP agent:
-    // - Echoes the spend request as an action plan proposal.
-    // - Adds a short rationale string for UX.
+    // Policy: agent-level spend limits (softer than on-chain caps)
+    const AGENT_MAX_PER_TX_USD = 50;
+    const AGENT_PREFERRED_MAX_USD = 10;
+    const MIN_SPEND_USD = 0.01;
+
+    // 1) Reject dust — not worth the gas
+    if (borrowUsd < MIN_SPEND_USD) {
+      return NextResponse.json(
+        { error: `Amount $${borrowUsd.toFixed(2)} is below agent minimum ($${MIN_SPEND_USD}). Not worth the gas cost.` },
+        { status: 400 }
+      );
+    }
+
+    // 2) Hard reject above agent max
+    if (borrowUsd > AGENT_MAX_PER_TX_USD) {
+      return NextResponse.json(
+        { error: `Amount $${borrowUsd.toFixed(2)} exceeds agent limit ($${AGENT_MAX_PER_TX_USD}). Split into smaller spends.` },
+        { status: 400 }
+      );
+    }
+
+    // 3) Adjust: if above preferred max, cap it (agent is conservative)
+    let approvedAmount = borrowAmount;
+    let adjusted = false;
+    if (borrowUsd > AGENT_PREFERRED_MAX_USD) {
+      const cappedBig = BigInt(AGENT_PREFERRED_MAX_USD * 10 ** USDC_DECIMALS);
+      approvedAmount = cappedBig.toString();
+      adjusted = true;
+    }
+
+    // 4) Build reasoning
+    const reasons: string[] = [];
+    if (adjusted) {
+      reasons.push(`Reduced from $${borrowUsd.toFixed(2)} to $${AGENT_PREFERRED_MAX_USD.toFixed(2)} — agent prefers smaller, frequent spends over large single borrows`);
+    } else {
+      reasons.push(`Amount $${borrowUsd.toFixed(2)} is within acceptable range`);
+    }
+    reasons.push(`Payee ${payee.slice(0, 8)}…${payee.slice(-4)} will receive funds`);
+    if (currentNonce) {
+      reasons.push(`Vault nonce ${currentNonce} — execution #${BigInt(currentNonce) + 1n}`);
+    }
+    reasons.push("Hard safety enforced by CRE consensus + 12 on-chain vault checks");
+
     const plan = {
       borrowAsset,
-      borrowAmount,
+      borrowAmount: approvedAmount,
       payee,
-      rationale: currentNonce
-        ? `Echo plan (vault currentNonce=${currentNonce}${depositNote ? `; ${depositNote}` : ""}); safety enforced by CRE + onchain vault`
-        : `Echo plan${depositNote ? ` (${depositNote})` : ""}; safety enforced by CRE + onchain vault`,
-      confidence: 0.9
+      reasoning: reasons,
+      decision: adjusted ? "approved_adjusted" : "approved",
+      requestedAmount: borrowAmount,
+      approvedAmount,
+      confidence: adjusted ? 0.75 : 0.95
     };
 
     return NextResponse.json(plan);

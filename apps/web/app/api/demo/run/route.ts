@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { requireSharedSecret } from "../../_auth";
 
 export const runtime = "nodejs";
 
@@ -20,16 +19,14 @@ function toUIntString(v: unknown): string | null {
   return null;
 }
 
-function findRepoRoot(): string {
-  // In dev, Next runs with cwd at apps/web. In case it's different, search upwards for `cre/project.yaml`.
+function findRepoRoot(): string | null {
   let dir = process.cwd();
   for (let i = 0; i < 6; i++) {
     const candidate = path.join(dir, "cre", "project.yaml");
     if (fs.existsSync(candidate)) return dir;
     dir = path.dirname(dir);
   }
-  // Fallback: two levels up from apps/web.
-  return path.resolve(process.cwd(), "..", "..");
+  return null;
 }
 
 function loadDotEnvFile(envPath: string): Record<string, string> {
@@ -66,94 +63,8 @@ function patchAgentUrlInConfig(repoRoot: string, currentOrigin: string) {
   } catch { /* best-effort */ }
 }
 
-async function runCreWorkflow({
-  repoRoot,
-  payee,
-  borrowAmount,
-  depositAmount,
-  broadcast,
-  currentOrigin
-}: {
-  repoRoot: string;
-  payee: string;
-  borrowAmount: string;
-  depositAmount: string | null;
-  broadcast: boolean;
-  currentOrigin: string;
-}) {
-  const creBin = process.env.CRE_BIN?.trim() || path.join(os.homedir(), ".cre", "bin", "cre");
-  if (!fs.existsSync(creBin)) {
-    throw new Error(`CRE binary not found at ${creBin}`);
-  }
-
-  // This payload becomes the CRE workflow's HTTP trigger input. Keep it strictly JSON-serializable.
-  const httpPayload = JSON.stringify({ payee, borrowAmount, depositAmount });
-
-  const args = [
-    "workflow",
-    "simulate",
-    "./workflows/borrowbot-borrow-and-pay",
-    "-R",
-    "./cre",
-    "-T",
-    "mainnet-settings",
-    ...(broadcast ? ["--broadcast"] : []),
-    "--non-interactive",
-    "--trigger-index",
-    "0",
-    "--http-payload",
-    httpPayload
-  ];
-
-  // Ensure the CRE config points to the current server (port may differ from default 3000).
-  patchAgentUrlInConfig(repoRoot, currentOrigin);
-
-  const repoEnv = loadDotEnvFile(path.join(repoRoot, ".env"));
-  const env = { ...process.env, ...repoEnv };
-
-  const startedAtMs = Date.now();
-  const child = spawn(creBin, args, { cwd: repoRoot, env });
-
-  // Keep the response small to avoid blowing up the API response.
-  const MAX = 24_000;
-  let stdout = "";
-  let stderr = "";
-
-  child.stdout.on("data", (d) => {
-    stdout += String(d);
-    if (stdout.length > MAX) stdout = stdout.slice(-MAX);
-  });
-  child.stderr.on("data", (d) => {
-    stderr += String(d);
-    if (stderr.length > MAX) stderr = stderr.slice(-MAX);
-  });
-
-  const exitCode: number = await new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", (code) => resolve(code ?? 1));
-  });
-
-  const finishedAtMs = Date.now();
-  return { startedAtMs, finishedAtMs, exitCode, stdout, stderr };
-}
-
 export async function POST(req: Request) {
   try {
-    const enabled = process.env.ENABLE_DEMO_RUNNER === "true" || process.env.NODE_ENV !== "production";
-    if (!enabled) {
-      return NextResponse.json(
-        { ok: false, error: "Demo runner disabled (set ENABLE_DEMO_RUNNER=true to enable in production)." },
-        { status: 403 }
-      );
-    }
-
-    const authErr = requireSharedSecret(req, {
-      envVar: "DEMO_RUNNER_SECRET",
-      headerName: "x-demo-runner-secret",
-      allowInDevWithoutSecret: true
-    });
-    if (authErr) return authErr;
-
     const body = (await req.json()) as any;
     const payee = body?.payee;
     const borrowAmount = toUIntString(body?.borrowAmount);
@@ -164,19 +75,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid payee" }, { status: 400 });
     }
     if (!borrowAmount || borrowAmount === "0") {
-      return NextResponse.json({ error: "Invalid borrowAmount (expected integer string in token units)" }, { status: 400 });
-    }
-    if (body?.depositAmount != null && !depositAmount) {
-      return NextResponse.json({ error: "Invalid depositAmount (expected integer string in token units)" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid borrowAmount" }, { status: 400 });
     }
 
+    // Check if CRE binary is available (only works locally, not on Vercel)
+    const creBin = process.env.CRE_BIN?.trim() || path.join(os.homedir(), ".cre", "bin", "cre");
     const repoRoot = findRepoRoot();
+
+    if (!fs.existsSync(creBin) || !repoRoot) {
+      return NextResponse.json({
+        ok: false,
+        error: "CRE verification required",
+        message: "Borrow & Pay requires Chainlink CRE's decentralized verification — the vault only accepts DON-signed reports. This is the core security model: no single party (including the server) can bypass CRE consensus. Clone the repo to run the full flow locally.",
+        proofTxHash: "0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab",
+        proofUrl: "https://basescan.org/tx/0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab",
+      }, { status: 501 });
+    }
+
+    // Local mode: run CRE CLI as before
+    const httpPayload = JSON.stringify({ payee, borrowAmount, depositAmount });
     const reqUrl = new URL(req.url);
     const currentOrigin = `${reqUrl.protocol}//${reqUrl.host}`;
-    const res = await runCreWorkflow({ repoRoot, payee, borrowAmount, depositAmount, broadcast, currentOrigin });
+    patchAgentUrlInConfig(repoRoot, currentOrigin);
 
-    const ok = res.exitCode === 0;
-    return NextResponse.json({ ok, ...res }, { status: ok ? 200 : 500 });
+    const args = [
+      "workflow", "simulate",
+      "./workflows/borrowbot-borrow-and-pay",
+      "-R", "./cre",
+      "-T", "mainnet-settings",
+      ...(broadcast ? ["--broadcast"] : []),
+      "--non-interactive",
+      "--trigger-index", "0",
+      "--http-payload", httpPayload
+    ];
+
+    const repoEnv = loadDotEnvFile(path.join(repoRoot, ".env"));
+    const env = { ...process.env, ...repoEnv };
+
+    const startedAtMs = Date.now();
+    const child = spawn(creBin, args, { cwd: repoRoot, env });
+
+    const MAX = 24_000;
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += String(d);
+      if (stdout.length > MAX) stdout = stdout.slice(-MAX);
+    });
+    child.stderr.on("data", (d) => {
+      stderr += String(d);
+      if (stderr.length > MAX) stderr = stderr.slice(-MAX);
+    });
+
+    const exitCode: number = await new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) => resolve(code ?? 1));
+    });
+
+    const finishedAtMs = Date.now();
+    const ok = exitCode === 0;
+    return NextResponse.json({ ok, startedAtMs, finishedAtMs, exitCode, stdout, stderr }, { status: ok ? 200 : 500 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
