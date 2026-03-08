@@ -350,7 +350,7 @@ export default function StoryReplay() {
           </div>
 
           {(depositing || depositStep) && !depositTx && !depositError && (
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex items-center justify-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-accent2 animate-pulse" />
               <p className="text-[11px] text-text-secondary">{depositStep}</p>
             </div>
