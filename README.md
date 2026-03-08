@@ -12,6 +12,8 @@ Agent Treasury uses [Chainlink CRE](https://chain.link/cre) and [Aave V3](https:
 
 [![Agent Treasury Demo](https://img.youtube.com/vi/bk0eFZd68bg/maxresdefault.jpg)](https://youtu.be/bk0eFZd68bg)
 
+**Live Site:** [agent-treasury.vercel.app](https://agent-treasury.vercel.app) | **Interactive Demo:** [agent-treasury.vercel.app/demo](https://agent-treasury.vercel.app/demo)
+
 ---
 
 ## The Cycle

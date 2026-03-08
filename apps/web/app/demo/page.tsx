@@ -1123,7 +1123,7 @@ function LiveDemo() {
             <div className={`miniField flex-1 min-w-0 ${!validPayee ? "invalid" : ""}`}>
               <div className="miniLabel">Payee address</div>
               <div className="miniRow">
-                <input className="miniInput mono" style={{ fontSize: "12px" }} inputMode="text" placeholder={DEFAULT_PAYEE} value={payee} onChange={(e) => setPayee(e.target.value)} disabled={running || confirmRunOpen} aria-label="Payee address" />
+                <input className="miniInput mono" style={{ fontSize: "12px" }} inputMode="text" placeholder={DEFAULT_PAYEE} value={DEFAULT_PAYEE} readOnly disabled aria-label="Payee address" />
               </div>
             </div>
             <div className={`miniField shrink-0 ${depositUnits == null || depositUnits === "0" ? "invalid" : ""}`} style={{ width: "110px" }}>
