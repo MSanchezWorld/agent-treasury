@@ -424,12 +424,10 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
           {[
-            { step: "Deposit", detail: "5 USDC → Aave V3", tx: "0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d", color: "accent" as const },
-            { step: "Borrow & Pay", detail: "1 USDC → Payee", tx: "0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab", color: "purple" as const },
-            { step: "Repay", detail: "1 USDC debt cleared", tx: "0x6d10ecf41134bc0f5061cd747540ca000d72350420258e82f6912398699baf9d", color: "amber" as const },
-            { step: "Withdraw", detail: "4.99 USDC → Wallet", tx: "0x84d50e773aa75fdfcc22562a5222174ac3f3e485455034bc9e0c4b454b66d1aa", color: "accent2" as const },
+            { step: "Deposit", detail: "5 USDC supplied to Aave V3 as collateral", tx: "0x935675413150c96c50cc2bd0b7c7a57ecf092dd40dadf8a08b91283b4abc2d7d", color: "accent" as const },
+            { step: "Borrow & Pay", detail: "CRE verified → vault borrowed 1 USDC → paid payee", tx: "0xb562a020d9a7574c1192a420cc827ead56045a9f6a95a566657898b6ae143dab", color: "purple" as const },
           ].map((item) => {
             const c = colorMap[item.color];
             return (
